@@ -139,7 +139,7 @@ def locations():
                         '''
             cursor.execute(sql_query, (current_user.id, results[0]))
             conn.commit()
-        cur.execute('Select * from ServiceLocation where cID=%s AND active = 1', (current_user.id,))
+        cur.execute('Select * from ServiceLocation where cID=%s AND active = 10', (current_user.id,))
         locations = cur.fetchall()
         cur.close()
         conn.close()
@@ -153,11 +153,62 @@ def stop_location_service(pID):
     cursor = conn.cursor()
     sql_query = 'UPDATE Properties SET active = FALSE WHERE pID = %s'
     cursor.execute(sql_query, (pID,))
-    conn.commit
-    cur.close()
+    conn.commit()
+    cursor.close()
     conn.close()
     flash('Stop Service！')
     return redirect(url_for('locations'))
+
+class NewDeviceForm(FlaskForm):
+    type = SelectField('Device Type',
+                               choices=[('', 'please select a device type'), # (value, label)
+                                        ('Refrigerator', 'Refrigerator'),
+                                        ('AC', ''),
+                                        ('Laptop', 'Laptop')])
+    model = SelectField('Device Model', choices=[])
+    submit = SubmitField('Add Device')
+
+
+@app.route('/location/<int:pID>', methods=['GET', 'POST'])
+# @login_required
+def devices(pID):
+    form = NewDeviceForm()
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    if request.method == 'POST':
+        type = form.type.data
+        model = form.model.data
+        if type == 'Refrigerator':
+            form.model.choices = [('Boeing 777-300er', 'Boeing 777-300er'), ('Airbus A380', 'Airbus A380'), ('Comac C919', 'Comac C919')]
+        elif type == 'AC':
+            form.model.choices = [('LG 2333', 'LG 2333'), ('Samsung 2200', 'Samsung 2200')]
+        elif type == 'Laptop':
+            form.model.choices = [('macbook pro', 'macbook pro'), ('alienware x17', 'alienware x17')]
+    if form.validate_on_submit():
+        sql_query = 'INSERT INTO Devices(type, model) VALUES (%s, %s)'
+        cursor.execute(sql_query, (location_id, device_type, device_model))
+        conn.commit()
+
+        cursor.execute('SELECT LAST_INSERT_ID()') # Retrieve the last inserted deviceID
+        new_device_id = cur.fetchone()[0]
+        sql_query = 'INSERT INTO Property_Device(pID, deviceID) VALUES(%s, %s);'
+        cursor.execute(sql_query, (pID, new_device_id))
+        conn.commit()
+
+        flash('New device added')
+        return redirect(url_for('devices', pID=pID))
+    sql_query = f'''
+                Select * 
+                from Devices 
+                NATURAL JOIN Property_Device 
+                where pID = %s
+                '''
+    cursor.execute(sql_query, (pID,))
+    devices=cur.fetchall()
+    cursor.close()
+    conn.close()
+
+    return render_template('devices.html', devices=devices, form=form, pID=pID)
 
 
 '''
