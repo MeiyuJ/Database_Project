@@ -17,7 +17,7 @@
         </div>
     {% else %}
     <!-- Form for selecting the period -->
-    <form method="post" action="{{ url_for('energy_consumption_summary') }}">
+    <form method="post" action="{{ url_for('energy_cost_summary') }}">
         <label for="select_period">Select Period:</label>
         <select id="select_period" name="select_period">
             <!-- Add options dynamically based on available periods -->
@@ -56,7 +56,7 @@ var myChart = new Chart(ctx, {
     data: {
         labels: labels,
         datasets: [{
-            label: 'Energy Consumption',
+            label: 'Energy Cost',
             data: values,
             backgroundColor: 'rgba(75, 192, 192, 0.2)', // Adjust color as needed
             borderColor: 'rgba(75, 192, 192, 1)', // Adjust color as needed
