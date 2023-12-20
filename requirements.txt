@@ -1,0 +1,12 @@
+cryptography
+email_validator
+flask
+flask_bcrypt
+flask_wtf
+flask-bootstrap
+flask-login
+flask-moment
+gunicorn
+pymysql
+requests
+seaborn

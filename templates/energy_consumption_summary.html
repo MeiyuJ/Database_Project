@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energy Consumption Summary</title>
+    <!-- Include Chart.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div>
+    <h1>Energy Consumption Summary</h1>
+    <canvas id="energyChart" width="400" height="200"></canvas>
+</div>
+
+<script>
+// Get chart data from Flask template variable
+var chartData = {{ chart_data | tojson }};
+
+// Extract labels and values
+var labels = chartData.labels;
+var values = chartData.values;
+
+// Create a bar chart
+var ctx = document.getElementById('energyChart').getContext('2d');
+var myChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: labels,
+        datasets: [{
+            label: 'Energy Consumption',
+            data: values,
+            backgroundColor: 'rgba(75, 192, 192, 0.2)', // Adjust color as needed
+            borderColor: 'rgba(75, 192, 192, 1)', // Adjust color as needed
+            borderWidth: 1
+        }]
+    },
+    options: {
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+</script>
+
+</body>
+</html>
