@@ -1,4 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for
+from flask_wtf import FlaskForm
+from wtforms import StringField, SubmitField, IntegerField, DateField, SelectField
+from wtforms.validators import DataRequired, Email, EqualTo
 import pymysql
 
 app = Flask(__name__)
@@ -14,7 +17,7 @@ DB_CONFIG = {
     "host": "localhost",
     "user": "root",
     "password": "abc123",
-    "database": "project1"
+    "database": "project2"
 }
 
 def get_db_conn():
@@ -85,6 +88,78 @@ def dashboard():
     return render_template("dashboard.html")
 
 
+class NewServiceLocationForm(FlaskForm):
+    start_date = DateField('Start Date', validators=[DataRequired()])
+    address = StringField('Address', validators=[DataRequired()])
+    zip_code = StringField('Zip Code', validators=[DataRequired()])
+    unit_number = IntegerField('Unit Number', validators=[DataRequired()])
+    area = IntegerField('Area(Square Footage)',validators=[DataRequired()])
+    n_bedroom= IntegerField('Number of Bedrooms', validators=[DataRequired()])
+    n_occupants= IntegerField('Number of Occupants', validators=[DataRequired()])
+
+    submit=SubmitField('Add Location')
+
+@app.route('/locations', methods=['GET', 'POST'])
+# @login_required
+def locations():
+    form = NewServiceLocationForm()
+    conn = get_db_conn()
+    cursor = conn.cursor()
+
+    if form.validate_on_submit():
+        sql_query = f'''
+                    SELECT pID 
+                    FROM Properties 
+                    WHERE address = %s
+                    AND unit_number = %s
+                    AND active = 1'''
+        cursor.execute(sql_query, (form.address.data, form.unit_number.data))
+        results = cursor.fetchone()
+        if not results: # No active service location here, Insert NEW
+            sql_query = f'''
+                        INSERT INTO Properties(start_date, address, zip_code, unit_number, area, n_bedroom, n_occupants) 
+                        VALUES(%s, %s, %s, %s, %s, %s, %s)
+                        '''
+            location_data = (
+                current_user.id,
+                form.start_date.data,
+                form.address.data,
+                form.zip_code.data,
+                form.unit_number.data,
+                form.area.data,
+                form.n_bedroom.data,
+                form.n_occupants.data
+            )
+            cursor.execute(sql_query, location_data)
+            conn.commit()
+        else: # Already active service location here, INSERT Customer_Property
+            sql_query = f'''
+                        INSERT INTO Customer_Property(cID, pID) 
+                        VALUES(%s, %s)
+                        '''
+            cursor.execute(sql_query, (current_user.id, results[0]))
+            conn.commit()
+        cur.execute('Select * from ServiceLocation where cID=%s AND active = 1', (current_user.id,))
+        locations = cur.fetchall()
+        cur.close()
+        conn.close()
+        return render_template('locations.html', form=form, locations=locations)
+
+
+@app.route('/stop_location_service/<int:pID>')
+@login_required
+def stop_location_service(pID):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    sql_query = 'UPDATE Properties SET active = FALSE WHERE pID = %s'
+    cursor.execute(sql_query, (pID,))
+    conn.commit
+    cur.close()
+    conn.close()
+    flash('Stop Service！')
+    return redirect(url_for('locations'))
+
+
 '''
 View 1: Summarize the total energy consumption daily or monthly
 '''
@@ -109,7 +184,7 @@ def energy_consumption_summary():
     # if (select_device):
     #     condition.append('deviceID = %s')
     #     params.append(deviceID)
-    time_granularity = 'monthly'
+    time_granularity = 'daily'
 
     # Get the time granularity from the form or use the default ('daily')
     # time_granularity = request.form.get('time_granularity', 'monthly')

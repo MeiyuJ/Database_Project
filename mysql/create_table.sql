@@ -1,56 +1,76 @@
-use cs6083;
+#create database project2;
 
-drop table if exists PowerPricing;
-drop table if exists Events;
+use project2;
+
+## Drop tables
+drop table if exists Price;
+drop table if exists Data;
+drop table if exists Property_Device;
 drop table if exists Devices;
-drop table if exists ServiceLocations;
-drop table if exists users;
+drop table if exists Customer_Property;
+drop table if exists Properties;
+drop table if exists Customers;
 
-create table users (
-    client_id int auto_increment primary key,
-    username varchar(100),
-    billing_address text,
-    password varchar(100),
-    email varchar(100) unique
+CREATE TABLE Customers (
+	cID INT(5) AUTO_INCREMENT PRIMARY KEY,
+	name VARCHAR(20) NOT NULL,
+    email VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(100) NOT NULL,
+	billing_address VARCHAR(50) NOT NULL,
 );
-alter table users auto_increment = 100;
+ALTER TABLE Customer AUTO_INCREMENT = 1;
 
-create table ServiceLocations (
-    service_id int auto_increment primary key,
-    client_id int,
-    building_info varchar(100),
-    unit_code int,
-    start_date date,
-    area_size int,
-    bedrooms int,
-    occupants int,
-    zip_code varchar(10),
-    foreign key (client_id) references users(client_id)
+
+# assuming the values of area are all integers
+CREATE TABLE Properties (
+	pID INT(5) AUTO_INCREMENT PRIMARY KEY,
+	start_date TIMESTAMP NOT NULL,
+	address VARCHAR(50) NOT NULL,
+	zip_code INT(5) NOT NULL,
+	unit_number INT(5) NOT NULL,
+	area INT(5) NOT NULL,
+	n_bedroom INT(5) NOT NULL,
+	n_occupants  INT(5) NOT NULL,
+    active BOOLEAN DEFAULT true
 );
-alter table ServiceLocations auto_increment = 1000;
+ALTER TABLE Properties AUTO_INCREMENT = 1;
 
-create table Devices (
-    device_id int auto_increment primary key,
-    service_id int,
-    category varchar(50),
-    model_type varchar(50),
-    foreign key (service_id) references ServiceLocations(service_id)
+CREATE TABLE Customer_Property (
+	cID INT(5),
+	pID INT(5),
+	PRIMARY KEY (cID, pID),
+	FOREIGN KEY (cID) REFERENCES Customers(cID),
+	FOREIGN KEY (pID) REFERENCES Properties(pID)
 );
-alter table Devices auto_increment = 10000;
 
-create table Events (
-    event_id int auto_increment primary key,
-    device_id int,
-    event_time datetime,
-    event_type varchar(100),
-    event_data decimal(12, 4),
-    foreign key (device_id) references Devices(device_id)
+CREATE TABLE Devices (
+	deviceID INT(5) AUTO_INCREMENT PRIMARY KEY,
+	type VARCHAR(20) NOT NULL,
+	model VARCHAR(50) NOT NULL
 );
-alter table Events auto_increment = 100000;
+ALTER TABLE Devices AUTO_INCREMENT = 1;
 
-create table PowerPricing (
-    postal varchar(10),
-    time_record datetime,
-    price_per_unit decimal(12, 4),
-    primary key (postal, time_record)
+CREATE TABLE Property_Device (
+	pID INT(5),
+	deviceID INT(5),
+	PRIMARY KEY (pID, deviceID),
+	FOREIGN KEY (pID) REFERENCES Properties(pID),
+	FOREIGN KEY (deviceID) REFERENCES Devices(deviceID)
+);
+
+CREATE TABLE Data (
+	deviceID INT(5),
+	report_time TIMESTAMP NOT NULL,
+	event_label VARCHAR(20) NOT NULL,
+	value DECIMAL(8, 2),
+	PRIMARY KEY (deviceID, report_time, event_label),
+	FOREIGN KEY (deviceID) REFERENCES Devices(deviceID)
+);
+
+CREATE TABLE Price (
+	am BOOLEAN NOT NULL,
+	weekend BOOLEAN NOT NULL,
+	zip_code INT(5) NOT NULL,
+	price_value DECIMAL(8, 2) NOT NULL,
+	PRIMARY KEY (am, weekend, zip_code)
 );

@@ -17,7 +17,7 @@
         </div>
     {% else %}
     <!-- Form for selecting the period -->
-    <form method="post" action="{{ url_for('energy_consumption_summary') }}">
+    <form method="post" action="{{ url_for('energy_consumption_summary') }}" id="energySummaryForm">
         <label for="select_period">Select Period:</label>
         <select id="select_period" name="select_period">
             <!-- Add options dynamically based on available periods -->
@@ -71,6 +71,13 @@ var myChart = new Chart(ctx, {
         }
     }
 });
+
+{#
+document.addEventListener('DOMContentLoaded', function() {
+    // Clear the form by resetting it
+    document.getElementById('energySummaryForm').reset();
+});
+ #}
 
 </script>
 
