@@ -66,11 +66,18 @@
             {% for location in locations %}
                 <li class="list-group-item">
                   <a href="{{ url_for('devices', pID=location.pID) }}">
-                        {{ location.address }} (Unit: {{ location.unit_number }})
+                        (ID: {{ location.pID }}) {{ location.address }} (Unit: {{ location.unit_number }})
                   </a>
                   <form action="{{ url_for('stop_location_service', pID=location.pID) }}" method="post">
                       <input type="submit" value="Stop Location Service">
                   </form>
+                </li>
+            {% endfor %}
+            {% for in_location in inactive_locations %}
+                <li class="list-group-item">
+                  <a>
+                        (Stop Service) (ID: {{ in_location.pID }}) {{ in_location.address }} (Unit: {{ in_location.unit_number }})
+                  </a>
                 </li>
             {% endfor %}
         </ul>

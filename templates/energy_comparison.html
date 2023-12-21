@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energy Consumption Summary</title>
+    <!-- Include Chart.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div>
+    <h1>Energy Comparison</h1>
+    {% if message %}
+        <div class="alert alert-warning" role="alert">
+            {{ message }}
+        </div>
+    {% else %}
+    <!-- Form for selecting the period -->
+    <form method="post" action="{{ url_for('energy_comparison') }}" id="energyComparisonForm">
+        {{ form.hidden_tag() }} {# Add this line to include CSRF token #}
+        <label for="pID">Service Location:</label>
+        {{ form.pID(class="form-control") }}
+
+        <label for="device_type">Device Type:</label>
+        {{ form.device_type(class="form-control") }}
+
+        <label for="time_granularity">Time Granularity:</label>
+        {{ form.time_granularity(class="form-control") }}
+
+        <label for="selected_period">Selected Period:</label>
+        {{ form.selected_period(class="form-control") }}
+
+        <button type="submit" class="btn btn-primary">Show Data</button>
+    </form>
+
+    <canvas id="energyChart" width="400" height="200"></canvas>
+
+    {% endif %}
+</div>
+
+<script>
+// Get chart data from Flask template variables
+var chartData = {{ chart_data | tojson }};
+var avgChartData = {{ avg_chart_data | tojson }};
+
+// Extract labels and values for specific location
+var labels = chartData.labels;
+var values = chartData.values;
+
+// Extract labels and values for average data
+var avgLabels = avgChartData.labels;
+var avgValues = avgChartData.values;
+
+// Create a grouped bar chart
+var ctx = document.getElementById('energyChart').getContext('2d');
+var myChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: labels,
+        datasets: [
+            {
+                label: 'Energy Consumption',
+                data: values,
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            },
+            {
+                label: 'Average Energy Consumption (Similar size)',
+                data: avgValues,
+                backgroundColor: 'rgba(255, 99, 132, 0.2)', // Adjust color as needed
+                borderColor: 'rgba(255, 99, 132, 1)', // Adjust color as needed
+                borderWidth: 1
+            }
+        ]
+    },
+    options: {
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+
+// Add event listener for form reset
+document.getElementById('energySummaryForm').addEventListener('reset', function() {
+    // You can reset additional elements or perform other actions here
+});
+{#</script>#}
+{#<script>#}
+    document.getElementById('pID').addEventListener('change', function() {
+        let cID = {{current_user.id }};
+        updateDeviceTypes(cID, this.value);
+        updateSelectedPeriods(cID, this.value, document.getElementById('device_type').value, document.getElementById('time_granularity').value);
+    });
+    document.getElementById('device_type').addEventListener('change', function() {
+        let cID = {{current_user.id }};
+        let pID = document.getElementById('pID').value;
+        updateSelectedPeriods(cID, pID, this.value, document.getElementById('time_granularity').value);
+    });
+
+    function updateServiceLocations(cID) {
+    fetch(`/get_locations/${cID}`)
+        .then(response => response.json())
+        .then(data => {
+            let serviceLocationSelect = document.getElementById('pID');
+            serviceLocationSelect.innerHTML = '';
+
+            data.forEach(loc => {
+                if (loc.pID !== 'all') {
+                    let option = new Option(loc[1], loc[0]);
+                    serviceLocationSelect.add(option);
+                }
+            });
+        });
+}
+
+    function updateDeviceTypes(cID, pID) {
+        fetch(`/get_device_types/${cID}/${pID}`)
+            .then(response => response.json())
+            .then(data => {
+                let deviceTypeSelect = document.getElementById('device_type');
+                deviceTypeSelect.innerHTML = '';
+                data.forEach(type => {
+                    let option = new Option(type[1], type[0]);
+                    deviceTypeSelect.add(option);
+                });
+            });
+    }
+
+    function updateSelectedPeriods(cID, pID, type, time_granularity) {
+        fetch(`/get_available_periods/${cID}/${pID}/${type}/${time_granularity}`)
+            .then(response => response.json())
+            .then(data => {
+                let periodSelect = document.getElementById('selected_period');
+                periodSelect.innerHTML = '';
+                data.forEach(period => {
+                    let option = new Option(period[1], period[0]);
+                    periodSelect.add(option);
+                });
+            });
+    }
+</script>
+</body>
+</html>

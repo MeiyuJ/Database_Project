@@ -183,14 +183,16 @@ def locations():
 
     print(current_user.id)
     cursor.execute('Select * from Properties NATURAL JOIN Customer_Property where cID=%s AND active=1', (current_user.id,))
-    locations = cursor.fetchall()
+    active_locations = cursor.fetchall()
+    cursor.execute('Select * from Properties NATURAL JOIN Customer_Property where cID=%s AND active=0', (current_user.id,))
+    inactive_locations = cursor.fetchall()
     print(locations)
     cursor.close()
     conn.close()
-    return render_template('locations.html', form=form, locations=locations)
+    return render_template('locations.html', form=form, locations=active_locations, inactive_locations=inactive_locations)
 
 
-@app.route('/stop_location_service/<int:pID>')
+@app.route('/stop_location_service/<int:pID>', methods=['POST'])
 @login_required
 def stop_location_service(pID):
     conn = get_db_conn()
@@ -279,7 +281,7 @@ View 1: Summarize the total energy consumption daily or monthly
 class EnergyComsumptionForm(FlaskForm):
     def __init__(self, *args, **kwargs):
         super(EnergyComsumptionForm, self).__init__(*args, **kwargs)
-        self.pID.choices = get_locations(current_user.id)
+        self.pID.choices = [('all', 'all'), ('active', 'active')] + get_locations(current_user.id)
 
     pID = SelectField('Service Location', choices=[('all', 'all'), ('active', 'active')])
     device_type = SelectField('Device Type', choices=[('all', 'all')])
@@ -287,8 +289,8 @@ class EnergyComsumptionForm(FlaskForm):
     selected_period = SelectField('Selected Period', choices=[])
     submit = SubmitField('Submit')
     def update_choices(self, pID, device_type, time_granularity):
-        self.pID.choices = get_locations(current_user.id)
-        self.device_type.choices = get_device_types(current_user.id, pID)
+        self.pID.choices = [('all', 'all'), ('active', 'active')] + get_locations(current_user.id)
+        self.device_type.choices = [('all', 'all')] + get_device_types(current_user.id, pID)
         self.selected_period.choices = get_available_periods(current_user.id, pID, device_type, time_granularity)
 
 
@@ -301,7 +303,7 @@ def get_locations(cID):
     results = cursor.fetchall()
     cursor.close()
     conn.close()
-    return [('all', 'all'), ('active', 'active')] + [(str(pID[0]), str(pID[0])) for pID in results]
+    return [(str(pID[0]), str(pID[0])) for pID in results]
 
 
 @app.route('/get_device_types/<cID>/<pID>')
@@ -342,7 +344,7 @@ def get_device_types(cID, pID):
     results = cursor.fetchall()
     cursor.close()
     conn.close()
-    return [('all', 'all')] + [(str(type[0]), str(type[0])) for type in results]
+    return [(str(type[0]), str(type[0])) for type in results]
 
 @app.route('/get_available_periods/<cID>/<pID>/<type>/<time_granularity>')
 @login_required
@@ -513,7 +515,7 @@ View 2: Summarize the total energy cost daily or monthly
 class EnergyCostForm(FlaskForm):
     def __init__(self, *args, **kwargs):
         super(EnergyCostForm, self).__init__(*args, **kwargs)
-        self.pID.choices = get_locations(current_user.id)
+        self.pID.choices = [('all', 'all'), ('active', 'active')] + get_locations(current_user.id)
 
     pID = SelectField('Service Location', choices=[('all', 'all'), ('active', 'active')])
     device_type = SelectField('Device Type', choices=[('all', 'all')])
@@ -521,8 +523,8 @@ class EnergyCostForm(FlaskForm):
     selected_period = SelectField('Selected Period', choices=[])
     submit = SubmitField('Submit')
     def update_choices(self, pID, device_type, time_granularity):
-        self.pID.choices = get_locations(current_user.id)
-        self.device_type.choices = get_device_types(current_user.id, pID)
+        self.pID.choices = [('all', 'all'), ('active', 'active')] + get_locations(current_user.id)
+        self.device_type.choices = [('all', 'all')] + get_device_types(current_user.id, pID)
         self.selected_period.choices = get_available_periods(current_user.id, pID, device_type, time_granularity)
 
 
@@ -664,7 +666,185 @@ def energy_cost_summary():
     return render_template('energy_cost_summary.html', form=form, chart_data=chart_data, message=message)
 
 
+'''View 3: Compare energy consumption with similar size properties'''
+class EnergyComparisonForm(FlaskForm):
+    def __init__(self, *args, **kwargs):
+        super(EnergyComparisonForm, self).__init__(*args, **kwargs)
+        self.pID.choices = get_locations(current_user.id)
 
+    pID = SelectField('Service Location', choices=[])
+    device_type = SelectField('Device Type', choices=[('all', 'all')])
+    time_granularity = SelectField('Time Granularity', choices=[('daily', 'daily'), ('monthly', 'monthly')])
+    selected_period = SelectField('Selected Period', choices=[])
+    submit = SubmitField('Submit')
+    def update_choices(self, pID, device_type, time_granularity):
+        self.pID.choices = get_locations(current_user.id)
+        self.device_type.choices = [('all', 'all')] + get_device_types(current_user.id, pID)
+        self.selected_period.choices = get_available_periods(current_user.id, pID, device_type, time_granularity)
+
+
+@app.route('/energy_comparison', methods=['GET', 'POST'])
+@login_required
+def energy_comparison():
+    form = EnergyComparisonForm()
+    message = None
+    chart_data = {
+        'labels': ['2022', '2023'],
+        'values': [0, 0],
+    }
+    avg_chart_data = {
+        'labels': ['2022', '2023'],
+        'values': [0, 0],
+    }
+
+    if request.method == 'POST':
+        form.update_choices(form.pID.data, form.device_type.data, form.time_granularity.data)
+        if form.validate_on_submit():
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            condition = []
+            params = []
+            # params.append(1)
+            # condition.append('pID = %s')
+            # params.append(form.pID.data)
+            if form.device_type.data != 'all':
+                condition.append('type = %s')
+                params.append(form.device_type.data)
+
+            time_granularity = form.time_granularity.data
+            selected_period = form.selected_period.data
+
+            if selected_period is not None:
+                print(selected_period)
+                if time_granularity == 'daily':
+                    # If daily granularity, user selects a month
+                    condition.append("concat(YEAR(report_time), '.', MONTH(report_time)) = %s")
+                elif time_granularity == 'monthly':
+                    # If monthly granularity, user selects a year
+                    condition.append("YEAR(report_time) = %s")
+                params.append(selected_period)
+            else:
+                print('bbbb')
+                # Display initial data (e.g., first available month or year)
+                if time_granularity == 'daily':
+                    # If daily granularity, show the first available month
+                    condition.append("YEAR(report_time) = (SELECT YEAR(MIN(report_time)) FROM Data)")
+                    condition.append("MONTH(report_time) = (SELECT MONTH(MIN(report_time)) FROM Data)")
+                elif time_granularity == 'monthly':
+                    # If monthly granularity, show the first available year
+                    condition.append("YEAR(report_time) = (SELECT MIN(YEAR(report_time)) FROM Data)")
+            print(params)
+
+            addition_where = ' AND '.join(condition)
+            if time_granularity == 'daily':
+                my_sql_query = f'''
+                            SELECT DATE(report_time) AS date, SUM(value) AS daily_energy_consumption
+                            FROM Data
+                            NATURAL JOIN Devices
+                            NATURAL JOIN Property_Device
+                            NATURAL JOIN Properties
+                            WHERE event_label = 'energy use'
+                            AND pid = {form.pID.data}
+                            AND {addition_where}
+                            GROUP BY Date(report_time)
+                            '''
+                avg_sql_query = f'''
+                                WITH Consumption_Summary (date, pID, area,total_energy_consumption) AS
+                                (Select DATE(report_time) AS date, pID, area, SUM(value) as total_energy_consumption
+                                From Data
+                                NATURAL JOIN Devices
+                                Natural join Property_Device
+                                Natural join Properties
+                                WHERE event_label = 'energy use'
+                                AND {addition_where}
+                                Group by Date(report_time), pID, area
+                                )
+                                Select date, AVG(total_energy_consumption)
+                                From Consumption_Summary CS
+                                Where ABS((SELECT area FROM Properties WHERE pid={form.pID.data}) - CS.area) <= CS.area*0.05
+                                GROUP BY date
+                                '''
+            elif time_granularity == 'monthly':
+                my_sql_query = f'''
+                            WITH a(year, month, monthly_energy_consumption) AS (
+                                SELECT YEAR(report_time), MONTH(report_time), SUM(value) AS monthly_energy_consumption
+                                FROM Data
+                                NATURAL JOIN Devices
+                                NATURAL JOIN Property_Device
+                                NATURAL JOIN Properties
+                                WHERE event_label = 'energy use'
+                                AND {addition_where}
+                                AND pid = {form.pID.data}
+                                GROUP BY YEAR(report_time), MONTH(report_time)
+                            )
+                            SELECT concat(year, '.', month) AS month, monthly_energy_consumption
+                            FROM a  
+                            '''
+                avg_sql_query = f'''
+                                WITH Consumption_Summary (year, month, pID, area,total_energy_consumption) AS
+                                (Select YEAR(report_time), MONTH(report_time), pID, area, SUM(value) as total_energy_consumption
+                                From Data
+                                NATURAL JOIN Devices
+                                Natural join Property_Device
+                                Natural join Properties
+                                WHERE event_label = 'energy use'
+                                AND {addition_where}
+                                Group by YEAR(report_time), MONTH(report_time), pID, area
+                                )
+                                Select concat(year, '.', month) AS month, AVG(total_energy_consumption)
+                                From Consumption_Summary CS
+                                Where ABS((SELECT area FROM Properties WHERE pid={form.pID.data}) - CS.area) <= CS.area*0.05
+                                GROUP BY concat(year, '.', month)
+                                '''
+            cursor.execute(my_sql_query, tuple(params))
+            my_results = cursor.fetchall()
+            cursor.execute(avg_sql_query, tuple(params))
+            avg_results = cursor.fetchall()
+            chart_data = []
+            avg_chart_data = []
+            print(my_results)
+            if not my_results:
+                message = "No energy consumption data found!"
+                return render_template('energy_comparison.html', form=form, chart_data=chart_data,
+                                       avg_chart_data=avg_chart_data, message=message)
+            else:
+                # Process the results and pass them to the template
+                my_results = sorted(my_results, key=lambda x: x[0])
+                labels = []
+                values = []
+
+                for row in my_results:
+                    # Use numerical indices for tuple elements
+                    label = str(row[0])
+                    value = float(row[1])
+                    labels.append(label)
+                    values.append(value)
+
+                chart_data = {
+                    'labels': labels,
+                    'values': values,
+                }
+
+                avg_results = sorted(avg_results, key=lambda x: x[0])
+                labels = []
+                values = []
+
+                for row in avg_results:
+                    # Use numerical indices for tuple elements
+                    label = str(row[0])
+                    value = float(row[1])
+                    labels.append(label)
+                    values.append(value)
+
+                avg_chart_data = {
+                    'labels': labels,
+                    'values': values,
+                }
+                cursor.close()
+                conn.close()
+                return render_template('energy_comparison.html', form=form, chart_data=chart_data,
+                                       avg_chart_data=avg_chart_data, message=message)
+    return render_template('energy_comparison.html', form=form, chart_data=chart_data, avg_chart_data=avg_chart_data, message=message)
 
 
 
