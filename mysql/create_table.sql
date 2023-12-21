@@ -16,9 +16,9 @@ CREATE TABLE Customers (
 	name VARCHAR(20) NOT NULL,
     email VARCHAR(50) UNIQUE NOT NULL,
     password VARCHAR(100) NOT NULL,
-	billing_address VARCHAR(50) NOT NULL,
+	billing_address VARCHAR(50) NOT NULL
 );
-ALTER TABLE Customer AUTO_INCREMENT = 1;
+ALTER TABLE Customers AUTO_INCREMENT = 1;
 
 
 # assuming the values of area are all integers

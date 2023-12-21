@@ -10,19 +10,22 @@ app.config['SECRET_KEY'] = 'MeiyuJ'
 # Flask-Login initialization
 login_manager = LoginManager(app)
 
-# MySQL database initialization
-# DB_CONFIG = {
-#     "host": "localhost",
-#     "user": "admin",
-#     "password": "admin",
-#     "database": "cs6083"
-# }
+#MySQL database initialization
+DB_CONFIG = {
+   "host": "localhost",
+    "user": "admin",
+    "password": "admin",
+    "database": "project2"
+}
+
+'''
 DB_CONFIG = {
     "host": "localhost",
     "user": "root",
     "password": "abc123",
     "database": "project2"
 }
+'''
 
 def get_db_conn():
     return pymysql.connect(**DB_CONFIG)
@@ -157,7 +160,6 @@ def locations():
                         VALUES(%s, %s, %s, %s, %s, %s, %s)
                         '''
             location_data = (
-                current_user.id,
                 form.start_date.data,
                 form.address.data,
                 form.zip_code.data,
@@ -169,10 +171,10 @@ def locations():
             cursor.execute(sql_query, location_data)
             conn.commit()
 
-            cursor.execute('SELECT LAST_INSERT_ID()')  # Retrieve the last inserted deviceID
-            new_property_id = cur.fetchone()[0]
+            cursor.execute('SELECT LAST_INSERT_ID() AS LAST_ID')  # Retrieve the last inserted deviceID
+            new_property_id = cursor.fetchone()
             sql_query = 'INSERT INTO Customer_Property(cID, pID) VALUES(%s, %s);'
-            cursor.execute(sql_query, (current_user.id, new_property_id))
+            cursor.execute(sql_query, (current_user.id, new_property_id['LAST_ID']))
             conn.commit()
         else: # Already active service location here, INSERT Customer_Property
             sql_query = f'''

@@ -20,6 +20,7 @@
         h2, h3 {
             color: #333;
             margin-bottom: 20px;
+            text-align: center;
         }
         ul.list-group {
             list-style: none;
@@ -56,6 +57,16 @@
         }
         h3 {
             margin-top: 40px;
+        }
+        .back-btn {
+            padding: 5px 10px;
+            background-color: #eb961e;
+            color: #fff;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
         }
     </style>
 </head>
@@ -101,8 +112,12 @@
             <div>{{ form.n_bedroom(size=32) }}</div>
             <div style="margin-top: 10px;">{{ form.n_occupants.label }}</div>
             <div>{{ form.n_occupants(size=32) }}</div>
+            <div></div>
             <div style="margin-top: 10px;">{{ form.submit }}</div>
         </form>
+        <br>
+        <a href="{{ url_for('dashboard') }}" class="back-btn">Back</a>
     </div>
+    
 </body>
 </html>

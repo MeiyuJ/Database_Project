@@ -19,6 +19,7 @@
         h2, h3 {
             color: #333;
             margin-bottom: 20px;
+            text-align: center;
         }
         ul.list-group {
             list-style: none;
@@ -54,6 +55,16 @@
         input[type="submit"]:hover {
             background-color: #c82333;
         }
+        .back-btn {
+            padding: 5px 10px;
+            background-color: #ee8617;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
     </style>
 </head>
 <body>
@@ -81,6 +92,8 @@
             <div>{{ form.model() }}</div>
             <div style="margin-top: 10px;">{{ form.submit }}</div>
         </form>
+        <br>
+        <a href="{{ url_for('locations') }}" class="back-btn">Back</a>
     </div>
 
     <script>

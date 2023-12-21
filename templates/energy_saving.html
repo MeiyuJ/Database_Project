@@ -33,6 +33,18 @@
             color: #333;
             font-weight: bold;
         }
+        .back-btn {
+            padding: 10px 20px;
+            background-color: #e74c3c;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+            text-align: right;
+            float: right;
+        }
         /* Add any additional styles as needed */
     </style>
 </head>
@@ -45,6 +57,9 @@
             {{ form.type(id='type') }}
             {{ form.submit }}
         </form>
+        <div>
+            <a href="{{ url_for('dashboard') }}" class="back-btn">Back</a>
+        </div>
         {% if message %}
             <div class="alert alert-info" role="alert" style="white-space: pre-line">{{ message }}</div>
         {% endif %}
