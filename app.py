@@ -1,10 +1,14 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, IntegerField, DateField, SelectField
 from wtforms.validators import DataRequired, Email, EqualTo
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 import pymysql
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'MeiyuJ'
+# Flask-Login initialization
+login_manager = LoginManager(app)
 
 # MySQL database initialization
 # DB_CONFIG = {
@@ -31,27 +35,51 @@ with app.app_context():
         # cursor.execute("select cID,name from Customers where cID=%s", (1))
         print(cursor.fetchone())  # (1,)
 
-# Routes
+
+# User class for Flask-Login
+class User(UserMixin):
+    def __init__(self, user_id, email):
+        self.id = user_id
+        self.email = email
+
+# User loader function for Flask-Login
+@login_manager.user_loader
+def load_user(user_id):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM Customers Where CID=%s',(user_id,))
+    results = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if results:
+        return User(user_id=results[0], email=results[2])
+    return None
+
+
 @app.route("/")
 def home():
     return render_template("home.html")
 
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form["username"]
+        email = request.form["email"]
         password = request.form["password"]
         
-        conn = pymysql.connect(**DB_CONFIG)
+        conn = get_db_conn()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = %s AND password = %s", (username, password))
+        cursor.execute("SELECT * FROM Customers WHERE email = %s AND password = %s", (email, password))
         user = cursor.fetchone()
         conn.close()
 
         if user:
             # Redirect to a different page after successful login
+            user = User(user_id=user[0], email=user[2])
+            login_user(user)
             return redirect(url_for("dashboard"))
         else:
+            flash("Invalid email or password")
             # Handle incorrect login credentials
             return render_template("login.html", error=True)
 
@@ -65,22 +93,29 @@ def signup():
         password = request.form["password"]
         email = request.form["email"]
 
-        conn = pymysql.connect(**DB_CONFIG)
+        conn = get_db_conn()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, billing_address, password, email) VALUES (%s, %s, %s, %s)", (username, billing_address, password, email))
-        conn.commit()
-        conn.close()
+        try:
+            cursor.execute("INSERT INTO Customers(name, email, password, billing_address) VALUES (%s, %s, %s, %s)", (name, email, password, billing_address))
 
-        # Redirect to login page after successful signup
-        return redirect(url_for("login"))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            print("Sign Up!")
+            # Redirect to login page after successful signup
+            return redirect(url_for("login"))
+        except Exception as e:
+            flash("Error")
 
     return render_template("signup.html")
 
 @app.route("/logout")
+@login_required
 def logout():
     # Perform logout actions if needed
     # For instance, clear session data, log the user out, etc.
     # Redirect the user to the home page after logout
+    logout_user()
     return redirect(url_for("home"))
 
 @app.route("/dashboard")
@@ -100,11 +135,11 @@ class NewServiceLocationForm(FlaskForm):
     submit=SubmitField('Add Location')
 
 @app.route('/locations', methods=['GET', 'POST'])
-# @login_required
+@login_required
 def locations():
     form = NewServiceLocationForm()
     conn = get_db_conn()
-    cursor = conn.cursor()
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
 
     if form.validate_on_submit():
         sql_query = f'''
@@ -132,6 +167,12 @@ def locations():
             )
             cursor.execute(sql_query, location_data)
             conn.commit()
+
+            cursor.execute('SELECT LAST_INSERT_ID()')  # Retrieve the last inserted deviceID
+            new_property_id = cur.fetchone()[0]
+            sql_query = 'INSERT INTO Customer_Property(cID, pID) VALUES(%s, %s);'
+            cursor.execute(sql_query, (current_user.id, new_property_id))
+            conn.commit()
         else: # Already active service location here, INSERT Customer_Property
             sql_query = f'''
                         INSERT INTO Customer_Property(cID, pID) 
@@ -139,11 +180,14 @@ def locations():
                         '''
             cursor.execute(sql_query, (current_user.id, results[0]))
             conn.commit()
-        cur.execute('Select * from ServiceLocation where cID=%s AND active = 10', (current_user.id,))
-        locations = cur.fetchall()
-        cur.close()
-        conn.close()
-        return render_template('locations.html', form=form, locations=locations)
+
+    print(current_user.id)
+    cursor.execute('Select * from Properties NATURAL JOIN Customer_Property where cID=%s AND active=1', (current_user.id,))
+    locations = cursor.fetchall()
+    print(locations)
+    cursor.close()
+    conn.close()
+    return render_template('locations.html', form=form, locations=locations)
 
 
 @app.route('/stop_location_service/<int:pID>')
@@ -161,11 +205,12 @@ def stop_location_service(pID):
 
 class NewDeviceForm(FlaskForm):
     type = SelectField('Device Type',
-                               choices=[('', 'please select a device type'), # (value, label)
-                                        ('Refrigerator', 'Refrigerator'),
-                                        ('AC', ''),
-                                        ('Laptop', 'Laptop')])
-    model = SelectField('Device Model', choices=[])
+                       choices=[('', 'please select a device type'), # (value, label)
+                                ('Refrigerator', 'Refrigerator'),
+                                ('AC', 'AC'),
+                                ('Laptop', 'Laptop')],
+                       id='type')
+    model = SelectField('Device Model', choices=[], id='model')
     submit = SubmitField('Add Device')
 
 
@@ -174,7 +219,7 @@ class NewDeviceForm(FlaskForm):
 def devices(pID):
     form = NewDeviceForm()
     conn = get_db_conn()
-    cursor = conn.cursor()
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
     if request.method == 'POST':
         type = form.type.data
         model = form.model.data
@@ -204,12 +249,29 @@ def devices(pID):
                 where pID = %s
                 '''
     cursor.execute(sql_query, (pID,))
-    devices=cur.fetchall()
+    devices=cursor.fetchall()
     cursor.close()
     conn.close()
 
     return render_template('devices.html', devices=devices, form=form, pID=pID)
 
+
+@app.route('/location/<int:pID>/delete_device/<int:deviceID>', methods=['POST'])
+# @login_required
+def delete_device(location_id, device_id):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+
+    cursor.execute('DELETE FROM Data WHERE deviceID = %s', (device_id,))
+    cursor.execute('DELETE FROM Property_Device WHERE deviceID = %s', (device_id,))
+    cursor.execute('DELETE FROM Devices WHERE deviceID = %s', (device_id,))
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    flash('Delete Device!')
+    return redirect(url_for('devices', pID=pID))
 
 '''
 View 1: Summarize the total energy consumption daily or monthly
@@ -224,8 +286,8 @@ def energy_consumption_summary():
     message = None
 
     condition.append('cID = %s')
-    # params.append(current_cID)
-    params.append(1)
+    params.append(current_user.id)
+    # params.append(1)
     # if (select_location):
     #     condition.append('pID = %s')
     #     params.append(pID)
@@ -351,7 +413,7 @@ def energy_consumption_summary():
 View 2: Summarize the total energy cost daily or monthly
 '''
 @app.route('/energy_cost_summary', methods=['GET', 'POST'])
-# @login_required
+@login_required
 def energy_cost_summary():
     conn = get_db_conn()
     cursor = conn.cursor()
@@ -360,8 +422,8 @@ def energy_cost_summary():
     message = None
 
     condition.append('cID = %s')
-    # params.append(current_cID)
-    params.append(1)
+    params.append(current_user.id)
+    # params.append(1)
     # if (select_location):
     #     condition.append('pID = %s')
     #     params.append(pID)

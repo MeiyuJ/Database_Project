@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Devices</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f7f7f7;
+        }
+        .container {
+            width: 80%;
+            margin: 0 auto;
+            text-align: center;
+            padding-top: 20px;
+        }
+        h2, h3 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        ul.list-group {
+            list-style: none;
+            padding: 0;
+        }
+        li.list-group-item {
+            background-color: #fff;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        a {
+            text-decoration: none;
+            color: #333;
+        }
+        form {
+            display: inline;
+            margin-bottom: 20px;
+        }
+        input[type="submit"] {
+            background-color: #dc3545;
+            color: #fff;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        input[type="submit"]:hover {
+            background-color: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h2>Devices</h2>
+        <ul class="list-group">
+            {% for device in devices %}
+                <li class="list-group-item">
+                    {{ device.type }} - {{ device.model }}
+                    <form action="{{ url_for('delete_device', pID=pID, deviceID=device.deviceID) }}" method="post">
+                        <input type="submit" value="Delete Device">
+                    </form>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <h3>Add a New Device</h3>
+    <div class="container">
+        <form method="post" action="{{ url_for('devices', pID=pID) }}">
+            {{ form.hidden_tag() }}
+            <div style="margin-top: 10px;">{{ form.type.label }}</div>
+            <div>{{ form.type() }}</div>
+            <div style="margin-top: 10px;">{{ form.model.label }}</div>
+            <div>{{ form.model() }}</div>
+            <div style="margin-top: 10px;">{{ form.submit }}</div>
+        </form>
+    </div>
+
+    <script>
+        // JavaScript code to update the second dropdown based on the selected value in the first dropdown
+        document.addEventListener('DOMContentLoaded', function () {
+            var typeDropdown = document.getElementById('type');
+            var modelDropdown = document.getElementById('model');
+            var modelsByType = {
+                'Refrigerator': ['Boeing 777-300er', 'Airbus A380', 'Comac C919'],
+                'AC': ['LG 2333', 'Samsung 2200'],
+                'Laptop': ['macbook pro', 'alienware x17']
+            };
+
+            typeDropdown.addEventListener('change', function () {
+                var selectedType = typeDropdown.value;
+                var models = modelsByType[selectedType] || [];
+                updateModelDropdown(models);
+            });
+
+            function updateModelDropdown(models) {
+                modelDropdown.innerHTML = '';
+                models.forEach(function (model) {
+                    var option = document.createElement('option');
+                    option.value = model;
+                    option.text = model;
+                    modelDropdown.appendChild(option);
+                });
+            }
+        });
+    </script>
+</body>
+</html>

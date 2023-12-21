@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Service Locations</title>
+    <style>
+        /* Styles (similar to login.html) */
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f7f7f7;
+        }
+        .container {
+            width: 80%;
+            margin: 0 auto;
+            text-align: center;
+            padding-top: 20px;
+        }
+        h2, h3 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        ul.list-group {
+            list-style: none;
+            padding: 0;
+        }
+        li.list-group-item {
+            background-color: #fff;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        a {
+            text-decoration: none;
+            color: #333;
+        }
+        form {
+            display: inline;
+        }
+        input[type="submit"] {
+            background-color: #dc3545;
+            color: #fff;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        input[type="submit"]:hover {
+            background-color: #c82333;
+        }
+        h3 {
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h2>Service Locations</h2>
+        <ul class="list-group">
+            {% for location in locations %}
+                <li class="list-group-item">
+                  <a href="{{ url_for('devices', pID=location.pID) }}">
+                        {{ location.address }} (Unit: {{ location.unit_number }})
+                  </a>
+                  <form action="{{ url_for('stop_location_service', pID=location.pID) }}" method="post">
+                      <input type="submit" value="Stop Location Service">
+                  </form>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <h3>Add a new Service Location</h3>
+    <div class="container">
+        <form method="post" action="{{ url_for('locations') }}">
+            {{ form.hidden_tag() }}
+            <div style="margin-top: 10px;">{{ form.start_date.label }}</div>
+            <div>{{ form.start_date(size=32) }}</div>
+            <div style="margin-top: 10px;">{{ form.address.label }}</div>
+            <div>{{ form.address(size=32) }}</div>
+            <div style="margin-top: 10px;">{{ form.unit_number.label }}</div>
+            <div>{{ form.unit_number(size=32) }}</div>
+            <div style="margin-top: 10px;">{{ form.zip_code.label }}</div>
+            <div>{{ form.zip_code(size=32) }}</div>
+            <div style="margin-top: 10px;">{{ form.area.label }}</div>
+            <div>{{ form.area(size=32) }}</div>
+            <div style="margin-top: 10px;">{{ form.n_bedroom.label }}</div>
+            <div>{{ form.n_bedroom(size=32) }}</div>
+            <div style="margin-top: 10px;">{{ form.n_occupants.label }}</div>
+            <div>{{ form.n_occupants(size=32) }}</div>
+            <div style="margin-top: 10px;">{{ form.submit }}</div>
+        </form>
+    </div>
+</body>
+</html>
