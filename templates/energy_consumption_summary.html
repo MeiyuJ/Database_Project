@@ -18,23 +18,21 @@
     {% else %}
     <!-- Form for selecting the period -->
     <form method="post" action="{{ url_for('energy_consumption_summary') }}" id="energySummaryForm">
-        <label for="select_period">Select Period:</label>
-        <select id="select_period" name="select_period">
-            <!-- Add options dynamically based on available periods -->
-            {% for period in available_periods %}
-                <option value="{{ period }}" {% if selected_period == period %}selected{% endif %}>{{ period }}</option>
-            {% endfor %}
-        </select>
+        {{ form.hidden_tag() }} {# Add this line to include CSRF token #}
+        <label for="pID">Service Location:</label>
+        {{ form.pID(class="form-control") }}
 
-{#        <label for="time_granularity">Time Granularity:</label>#}
-{#        <select id="time_granularity" name="time_granularity">#}
-{#            <option value="daily" {% if time_granularity == 'daily' %}selected{% endif %}>Daily</option>#}
-{#            <option value="monthly" {% if time_granularity == 'monthly' %}selected{% endif %}>Monthly</option>#}
-{#        </select>#}
+        <label for="device_type">Device Type:</label>
+        {{ form.device_type(class="form-control") }}
 
-        <button type="submit">Show Data</button>
+        <label for="time_granularity">Time Granularity:</label>
+        {{ form.time_granularity(class="form-control") }}
+
+        <label for="selected_period">Selected Period:</label>
+        {{ form.selected_period(class="form-control") }}
+
+        <button type="submit" class="btn btn-primary">Show Data</button>
     </form>
-
 
     <canvas id="energyChart" width="400" height="200"></canvas>
 
@@ -72,14 +70,64 @@ var myChart = new Chart(ctx, {
     }
 });
 
-{#
-document.addEventListener('DOMContentLoaded', function() {
-    // Clear the form by resetting it
-    document.getElementById('energySummaryForm').reset();
+// Add event listener for form reset
+document.getElementById('energySummaryForm').addEventListener('reset', function() {
+    // You can reset additional elements or perform other actions here
 });
- #}
+{#</script>#}
+{#<script>#}
+    document.getElementById('pID').addEventListener('change', function() {
+        let cID = {{current_user.id }};
+        updateDeviceTypes(cID, this.value);
+        updateSelectedPeriods(cID, this.value, document.getElementById('device_type').value, document.getElementById('time_granularity').value);
+    });
+    document.getElementById('device_type').addEventListener('change', function() {
+        let cID = {{current_user.id }};
+        let pID = document.getElementById('pID').value;
+        updateSelectedPeriods(cID, pID, this.value, document.getElementById('time_granularity').value);
+    });
 
+    function updateServiceLocations(cID) {
+    fetch(`/get_locations/${cID}`)
+        .then(response => response.json())
+        .then(data => {
+            let serviceLocationSelect = document.getElementById('pID');
+            serviceLocationSelect.innerHTML = '';
+
+            data.forEach(loc => {
+                if (loc.pID !== 'all') {
+                    let option = new Option(loc[1], loc[0]);
+                    serviceLocationSelect.add(option);
+                }
+            });
+        });
+}
+
+    function updateDeviceTypes(cID, pID) {
+        fetch(`/get_device_types/${cID}/${pID}`)
+            .then(response => response.json())
+            .then(data => {
+                let deviceTypeSelect = document.getElementById('device_type');
+                deviceTypeSelect.innerHTML = '';
+                data.forEach(type => {
+                    let option = new Option(type[1], type[0]);
+                    deviceTypeSelect.add(option);
+                });
+            });
+    }
+
+    function updateSelectedPeriods(cID, pID, type, time_granularity) {
+        fetch(`/get_available_periods/${cID}/${pID}/${type}/${time_granularity}`)
+            .then(response => response.json())
+            .then(data => {
+                let periodSelect = document.getElementById('selected_period');
+                periodSelect.innerHTML = '';
+                data.forEach(period => {
+                    let option = new Option(period[1], period[0]);
+                    periodSelect.add(option);
+                });
+            });
+    }
 </script>
-
 </body>
 </html>

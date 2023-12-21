@@ -88,7 +88,7 @@ def login():
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
-        username = request.form["username"]
+        name = request.form["name"]
         billing_address = request.form["billing_address"]
         password = request.form["password"]
         email = request.form["email"]
@@ -276,43 +276,104 @@ def delete_device(location_id, device_id):
 '''
 View 1: Summarize the total energy consumption daily or monthly
 '''
-@app.route('/energy_consumption_summary', methods=['GET', 'POST'])
-# @login_required
-def energy_consumption_summary():
+class EnergyComsumptionForm(FlaskForm):
+    def __init__(self, *args, **kwargs):
+        super(EnergyComsumptionForm, self).__init__(*args, **kwargs)
+        self.pID.choices = get_locations(current_user.id)
+
+    pID = SelectField('Service Location', choices=[('all', 'all'), ('active', 'active')])
+    device_type = SelectField('Device Type', choices=[('all', 'all')])
+    time_granularity = SelectField('Time Granularity', choices=[('daily', 'daily'), ('monthly', 'monthly')])
+    selected_period = SelectField('Selected Period', choices=[])
+    submit = SubmitField('Submit')
+    def update_choices(self, pID, device_type, time_granularity):
+        self.pID.choices = get_locations(current_user.id)
+        self.device_type.choices = get_device_types(current_user.id, pID)
+        self.selected_period.choices = get_available_periods(current_user.id, pID, device_type, time_granularity)
+
+
+@app.route('/get_locations/<cID>')
+@login_required
+def get_locations(cID):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute('SELECT pID FROM Customer_Property WHERE cID = %s', (cID,))
+    results = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [('all', 'all'), ('active', 'active')] + [(str(pID[0]), str(pID[0])) for pID in results]
+
+
+@app.route('/get_device_types/<cID>/<pID>')
+@login_required
+def get_device_types(cID, pID):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    if pID == 'all':
+        sql_query = f'''
+                    SELECT DISTINCT type 
+                    FROM Devices 
+                    NATURAL JOIN Property_Device 
+                    NATURAL JOIN Customer_Property 
+                    WHERE cID = %s
+                    '''
+        cursor.execute(sql_query, (cID,))
+    elif pID == 'active':
+        sql_query = f'''
+                    SELECT DISTINCT type 
+                    FROM Devices 
+                    NATURAL JOIN Property_Device
+                    NATURAL JOIN Properties
+                    NATURAL JOIN Customer_Property 
+                    WHERE cID = %s
+                    AND active = 1
+                    '''
+        cursor.execute(sql_query, (cID,))
+    else:
+        sql_query = f'''
+                    SELECT DISTINCT type 
+                    FROM Devices 
+                    NATURAL JOIN Property_Device 
+                    NATURAL JOIN Customer_Property 
+                    WHERE cID = %s
+                    AND pID = %s
+                    '''
+        cursor.execute(sql_query, (cID, pID))
+    results = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [('all', 'all')] + [(str(type[0]), str(type[0])) for type in results]
+
+@app.route('/get_available_periods/<cID>/<pID>/<type>/<time_granularity>')
+@login_required
+def get_available_periods(cID, pID, type, time_granularity):
     conn = get_db_conn()
     cursor = conn.cursor()
     condition = []
     params = []
-    message = None
 
     condition.append('cID = %s')
-    params.append(current_user.id)
-    # params.append(1)
-    # if (select_location):
-    #     condition.append('pID = %s')
-    #     params.append(pID)
-    # if (select_device_type):
-    #     condition.append('type = %s')
-    #     params.append(device_type)
-    # if (select_device):
-    #     condition.append('deviceID = %s')
-    #     params.append(deviceID)
-    time_granularity = 'daily'
-
-    # Get the time granularity from the form or use the default ('daily')
-    # time_granularity = request.form.get('time_granularity', 'monthly')
-
+    params.append(cID)
+    if pID != 'all':
+        if pID =='active':
+            condition.append('active = 1')
+        else:
+            condition.append('pID = %s')
+            params.append(pID)
+    if type != 'all':
+        condition.append('type = %s')
+        params.append(type)
     addition_where = ' AND '.join(condition)
-
-    # Get distinct periods based on time_granularity
     if time_granularity == 'daily':
         sql_query = f'''
                     SELECT DISTINCT concat(YEAR(report_time), '.', MONTH(report_time)) AS period
                     FROM Data
                     NATURAL JOIN Devices
                     NATURAL JOIN Property_Device
+                    NATURAL JOIN Properties
                     NATURAL JOIN Customer_Property
-                    WHERE {addition_where}
+                    WHERE event_label = 'energy use'
+                    AND {addition_where}
                     '''
     elif time_granularity == 'monthly':
         sql_query = f'''
@@ -320,253 +381,287 @@ def energy_consumption_summary():
                     FROM Data
                     NATURAL JOIN Devices
                     NATURAL JOIN Property_Device
-                    NATURAL JOIN Customer_Property
-                    WHERE {addition_where}
-                    '''
-    cursor.execute(sql_query, tuple(params))
-    available_periods = [str(row[0]) for row in sorted(cursor.fetchall())]
-    print(available_periods)
-
-    # Assuming you have a button on your HTML form named 'select_period'
-    selected_period = request.form.get('select_period', None)
-
-    if selected_period is not None:
-        # Handle user-selected period
-        print(selected_period)
-        if time_granularity == 'daily':
-            # If daily granularity, user selects a month
-            condition.append("concat(YEAR(report_time), '.', MONTH(report_time)) = %s")
-        elif time_granularity == 'monthly':
-            # If monthly granularity, user selects a year
-            condition.append("YEAR(report_time) = %s")
-        params.append(selected_period)
-    else:
-        print('bbbb')
-        # Display initial data (e.g., first available month or year)
-        if time_granularity == 'daily':
-            # If daily granularity, show the first available month
-            condition.append("YEAR(report_time) = (SELECT YEAR(MIN(report_time)) FROM Data)")
-            condition.append("MONTH(report_time) = (SELECT MONTH(MIN(report_time)) FROM Data)")
-        elif time_granularity == 'monthly':
-            # If monthly granularity, show the first available year
-            condition.append("YEAR(report_time) = (SELECT MIN(YEAR(report_time)) FROM Data)")
-    print(params)
-
-    addition_where = ' AND '.join(condition)
-    if time_granularity == 'daily':
-        sql_query = f'''
-                    SELECT DATE(report_time) AS date, SUM(value) AS daily_energy_consumption
-                    FROM Data
-                    NATURAL JOIN Devices
-                    NATURAL JOIN Property_Device
+                    NATURAL JOIN Properties
                     NATURAL JOIN Customer_Property
                     WHERE event_label = 'energy use'
                     AND {addition_where}
-                    GROUP BY Date(report_time)
-                    '''
-    elif time_granularity == 'monthly':
-        sql_query = f'''
-                    WITH a(year, month, monthly_energy_consumption) AS (
-                        SELECT YEAR(report_time), MONTH(report_time), SUM(value) AS monthly_energy_consumption
-                        FROM Data
-                        NATURAL JOIN Devices
-                        NATURAL JOIN Property_Device
-                        NATURAL JOIN Customer_Property
-                        WHERE event_label = 'energy use'
-                        AND {addition_where}
-                        GROUP BY YEAR(report_time), MONTH(report_time)
-                    )
-                    SELECT concat(year, '.', month) AS month, monthly_energy_consumption
-                    FROM a  
                     '''
     cursor.execute(sql_query, tuple(params))
-    results = cursor.fetchall()
-    chart_data = []
-    print(results)
-    if not results:
-        message = "No energy consumption data found!"
-        return render_template('energy_consumption_summary.html', chart_data=chart_data, selected_period=selected_period, available_periods=available_periods,  message=message)
-    else:
-        # Process the results and pass them to the template
-        results = sorted(results, key=lambda x: x[0])
-        labels = []
-        values = []
+    available_periods = sorted(cursor.fetchall())
+    cursor.close()
+    conn.close()
+    return [(str(period[0]), str(period[0])) for period in available_periods]
 
-        for row in results:
-            # Use numerical indices for tuple elements
-            label = str(row[0])
-            value = float(row[1])
-            labels.append(label)
-            values.append(value)
 
-        chart_data = {
-            'labels': labels,
-            'values': values,
-        }
+@app.route('/energy_consumption_summary', methods=['GET', 'POST'])
+@login_required
+def energy_consumption_summary():
+    form = EnergyComsumptionForm()
+    message = None
+    chart_data = {
+        'labels': ['2022', '2023'],
+        'values': [0, 0],
+    }
 
-        cursor.close()
-        conn.close()
-        return render_template('energy_consumption_summary.html', chart_data=chart_data, selected_period=selected_period, available_periods=available_periods,  message=message)
+    if request.method == 'POST':
+        form.update_choices(form.pID.data, form.device_type.data, form.time_granularity.data)
+        if form.validate_on_submit():
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            condition = []
+            params = []
+            condition.append('cID = %s')
+            params.append(current_user.id)
+            # params.append(1)
+            if form.pID.data != 'all':
+                if form.pID.data =='active':
+                    condition.append('active = 1')
+                else:
+                    condition.append('pID = %s')
+                    params.append(form.pID.data)
+            if form.device_type.data != 'all':
+                condition.append('type = %s')
+                params.append(form.device_type.data)
+
+            time_granularity = form.time_granularity.data
+            selected_period = form.selected_period.data
+
+            if selected_period is not None:
+                print(selected_period)
+                if time_granularity == 'daily':
+                    # If daily granularity, user selects a month
+                    condition.append("concat(YEAR(report_time), '.', MONTH(report_time)) = %s")
+                elif time_granularity == 'monthly':
+                    # If monthly granularity, user selects a year
+                    condition.append("YEAR(report_time) = %s")
+                params.append(selected_period)
+            else:
+                print('bbbb')
+                # Display initial data (e.g., first available month or year)
+                if time_granularity == 'daily':
+                    # If daily granularity, show the first available month
+                    condition.append("YEAR(report_time) = (SELECT YEAR(MIN(report_time)) FROM Data)")
+                    condition.append("MONTH(report_time) = (SELECT MONTH(MIN(report_time)) FROM Data)")
+                elif time_granularity == 'monthly':
+                    # If monthly granularity, show the first available year
+                    condition.append("YEAR(report_time) = (SELECT MIN(YEAR(report_time)) FROM Data)")
+            print(params)
+
+            addition_where = ' AND '.join(condition)
+            if time_granularity == 'daily':
+                sql_query = f'''
+                            SELECT DATE(report_time) AS date, SUM(value) AS daily_energy_consumption
+                            FROM Data
+                            NATURAL JOIN Devices
+                            NATURAL JOIN Property_Device
+                            NATURAL JOIN Properties
+                            NATURAL JOIN Customer_Property
+                            WHERE event_label = 'energy use'
+                            AND {addition_where}
+                            GROUP BY Date(report_time)
+                            '''
+            elif time_granularity == 'monthly':
+                sql_query = f'''
+                            WITH a(year, month, monthly_energy_consumption) AS (
+                                SELECT YEAR(report_time), MONTH(report_time), SUM(value) AS monthly_energy_consumption
+                                FROM Data
+                                NATURAL JOIN Devices
+                                NATURAL JOIN Property_Device
+                                NATURAL JOIN Properties
+                                NATURAL JOIN Customer_Property
+                                WHERE event_label = 'energy use'
+                                AND {addition_where}
+                                GROUP BY YEAR(report_time), MONTH(report_time)
+                            )
+                            SELECT concat(year, '.', month) AS month, monthly_energy_consumption
+                            FROM a  
+                            '''
+            cursor.execute(sql_query, tuple(params))
+            results = cursor.fetchall()
+            chart_data = []
+            print(results)
+            if not results:
+                message = "No energy consumption data found!"
+                return render_template('energy_consumption_summary.html', form=form, chart_data=chart_data, message=message)
+            else:
+                # Process the results and pass them to the template
+                results = sorted(results, key=lambda x: x[0])
+                labels = []
+                values = []
+
+                for row in results:
+                    # Use numerical indices for tuple elements
+                    label = str(row[0])
+                    value = float(row[1])
+                    labels.append(label)
+                    values.append(value)
+
+                chart_data = {
+                    'labels': labels,
+                    'values': values,
+                }
+
+                cursor.close()
+                conn.close()
+                return render_template('energy_consumption_summary.html', form=form, chart_data=chart_data, message=message)
+    return render_template('energy_consumption_summary.html', form=form, chart_data=chart_data, message=message)
 
 
 '''
 View 2: Summarize the total energy cost daily or monthly
 '''
+class EnergyCostForm(FlaskForm):
+    def __init__(self, *args, **kwargs):
+        super(EnergyCostForm, self).__init__(*args, **kwargs)
+        self.pID.choices = get_locations(current_user.id)
+
+    pID = SelectField('Service Location', choices=[('all', 'all'), ('active', 'active')])
+    device_type = SelectField('Device Type', choices=[('all', 'all')])
+    time_granularity = SelectField('Time Granularity', choices=[('daily', 'daily'), ('monthly', 'monthly')])
+    selected_period = SelectField('Selected Period', choices=[])
+    submit = SubmitField('Submit')
+    def update_choices(self, pID, device_type, time_granularity):
+        self.pID.choices = get_locations(current_user.id)
+        self.device_type.choices = get_device_types(current_user.id, pID)
+        self.selected_period.choices = get_available_periods(current_user.id, pID, device_type, time_granularity)
+
+
 @app.route('/energy_cost_summary', methods=['GET', 'POST'])
 @login_required
 def energy_cost_summary():
-    conn = get_db_conn()
-    cursor = conn.cursor()
-    condition = []
-    params = []
+    form = EnergyCostForm()
     message = None
+    chart_data = {
+        'labels': ['2022', '2023'],
+        'values': [0, 0],
+    }
 
-    condition.append('cID = %s')
-    params.append(current_user.id)
-    # params.append(1)
-    # if (select_location):
-    #     condition.append('pID = %s')
-    #     params.append(pID)
-    # if (select_device_type):
-    #     condition.append('type = %s')
-    #     params.append(device_type)
-    # if (select_device):
-    #     condition.append('deviceID = %s')
-    #     params.append(deviceID)
-    time_granularity = 'monthly'
+    if request.method == 'POST':
+        form.update_choices(form.pID.data, form.device_type.data, form.time_granularity.data)
+        if form.validate_on_submit():
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            condition = []
+            params = []
+            condition.append('cID = %s')
+            params.append(current_user.id)
+            # params.append(1)
+            if form.pID.data != 'all':
+                if form.pID.data == 'active':
+                    condition.append('active = 1')
+                else:
+                    condition.append('pID = %s')
+                    params.append(form.pID.data)
+            if form.device_type.data != 'all':
+                condition.append('type = %s')
+                params.append(form.device_type.data)
 
-    # Get the time granularity from the form or use the default ('daily')
-    # time_granularity = request.form.get('time_granularity', 'monthly')
+            time_granularity = form.time_granularity.data
+            selected_period = form.selected_period.data
 
-    addition_where = ' AND '.join(condition)
+            if selected_period is not None:
+                print(selected_period)
+                if time_granularity == 'daily':
+                    # If daily granularity, user selects a month
+                    condition.append("concat(YEAR(report_time), '.', MONTH(report_time)) = %s")
+                elif time_granularity == 'monthly':
+                    # If monthly granularity, user selects a year
+                    condition.append("YEAR(report_time) = %s")
+                params.append(selected_period)
+            else:
+                print('bbbb')
+                # Display initial data (e.g., first available month or year)
+                if time_granularity == 'daily':
+                    # If daily granularity, show the first available month
+                    condition.append("YEAR(report_time) = (SELECT YEAR(MIN(report_time)) FROM Data)")
+                    condition.append("MONTH(report_time) = (SELECT MONTH(MIN(report_time)) FROM Data)")
+                elif time_granularity == 'monthly':
+                    # If monthly granularity, show the first available year
+                    condition.append("YEAR(report_time) = (SELECT MIN(YEAR(report_time)) FROM Data)")
+            print(params)
 
-    # Get distinct periods based on time_granularity
-    if time_granularity == 'daily':
-        sql_query = f'''
-                    SELECT DISTINCT concat(YEAR(report_time), '.', MONTH(report_time)) AS period
-                    FROM Data
-                    NATURAL JOIN Devices
-                    NATURAL JOIN Property_Device
-                    NATURAL JOIN Customer_Property
-                    WHERE {addition_where}
-                    '''
-    elif time_granularity == 'monthly':
-        sql_query = f'''
-                    SELECT DISTINCT YEAR(report_time)
-                    FROM Data
-                    NATURAL JOIN Devices
-                    NATURAL JOIN Property_Device
-                    NATURAL JOIN Customer_Property
-                    WHERE {addition_where}
-                    '''
-    cursor.execute(sql_query, tuple(params))
-    available_periods = [str(row[0]) for row in sorted(cursor.fetchall())]
-    print(available_periods)
+            addition_where = ' AND '.join(condition)
+            if time_granularity == 'daily':
+                sql_query = f'''
+                            WITH t1(pID, date, value, weekend, am) AS
+                                (Select pID, Date(report_time) AS date, value, 
+                                CASE when DAYOFWEEK(report_time) in (2,3,4,5,6) THEN false
+                                ELSE true END as weekend, 
+                                CASE when DATE_FORMAT(report_time, '%%p') = 'AM' THEN true
+                                ELSE false END as am
+                                FROM Data
+                                NATURAL JOIN Devices
+                                NATURAL JOIN Property_Device
+                                NATURAL JOIN Properties
+                                NATURAL JOIN Customer_Property
+                                WHERE event_label = 'energy use'
+                                AND {addition_where}
+                            ),
+                            t2(date, cost) AS
+                                (SELECT date, (value * price_value) AS cost
+                                FROM t1
+                                Natural Join Price
+                            )
+                            SELECT date, SUM(cost) AS daily_energy_cost
+                            FROM t2
+                            Group by date;
+                            '''
+            elif time_granularity == 'monthly':
+                sql_query = f'''
+                            WITH t1(pID, date, value, weekend, am) AS
+                                (Select pID, Date(report_time) AS date, value, 
+                                CASE when DAYOFWEEK(report_time) in (2,3,4,5,6) THEN false
+                                ELSE true END as weekend, 
+                                CASE when DATE_FORMAT(report_time, '%%p') = 'AM' THEN true
+                                ELSE false END as am
+                                FROM Data
+                                NATURAL JOIN Devices
+                                NATURAL JOIN Property_Device
+                                NATURAL JOIN Properties
+                                NATURAL JOIN Customer_Property
+                                WHERE event_label = 'energy use'
+                                AND {addition_where}
+                            ),
+                            t2(month, cost) AS
+                                (SELECT concat(YEAR(date), '.', MONTH(date)) AS month, (value * price_value) AS cost
+                                FROM t1
+                                Natural Join Price
+                            )
+                            SELECT month, SUM(cost) AS daily_energy_cost
+                            FROM t2
+                            Group by month;
+                            '''
+            cursor.execute(sql_query, tuple(params))
+            results = cursor.fetchall()
+            chart_data = []
+            print(results)
+            if not results:
+                message = "No energy consumption data found!"
+                return render_template('energy_consumption_summary.html', form=form, chart_data=chart_data,
+                                       message=message)
+            else:
+                # Process the results and pass them to the template
+                results = sorted(results, key=lambda x: x[0])
+                labels = []
+                values = []
 
-    # Assuming you have a button on your HTML form named 'select_period'
-    selected_period = request.form.get('select_period', None)
+                for row in results:
+                    # Use numerical indices for tuple elements
+                    label = str(row[0])
+                    value = float(row[1])
+                    labels.append(label)
+                    values.append(value)
 
-    if selected_period is not None:
-        # Handle user-selected period
-        print(selected_period)
-        if time_granularity == 'daily':
-            # If daily granularity, user selects a month
-            condition.append("concat(YEAR(report_time), '.', MONTH(report_time)) = %s")
-        elif time_granularity == 'monthly':
-            # If monthly granularity, user selects a year
-            condition.append("YEAR(report_time) = %s")
-        params.append(selected_period)
-    else:
-        print('bbbb')
-        # Display initial data (e.g., first available month or year)
-        if time_granularity == 'daily':
-            # If daily granularity, show the first available month
-            condition.append("YEAR(report_time) = (SELECT YEAR(MIN(report_time)) FROM Data)")
-            condition.append("MONTH(report_time) = (SELECT MONTH(MIN(report_time)) FROM Data)")
-        elif time_granularity == 'monthly':
-            # If monthly granularity, show the first available year
-            condition.append("YEAR(report_time) = (SELECT MIN(YEAR(report_time)) FROM Data)")
-    print(params)
+                chart_data = {
+                    'labels': labels,
+                    'values': values,
+                }
 
-    addition_where = ' AND '.join(condition)
-    if time_granularity == 'daily':
-        sql_query = f'''
-                    WITH t1(pID, date, value, weekend, am) AS
-                        (Select pID, Date(report_time) AS date, value, 
-                        CASE when DAYOFWEEK(report_time) in (2,3,4,5,6) THEN false
-                        ELSE true END as weekend, 
-                        CASE when DATE_FORMAT(report_time, '%%p') = 'AM' THEN true
-                        ELSE false END as am
-                        FROM Data
-                        NATURAL JOIN Devices
-                        NATURAL JOIN Property_Device
-                        NATURAL JOIN Customer_Property
-                        WHERE event_label = 'energy use'
-                        AND {addition_where}
-                    ),
-                    t2(date, cost) AS
-                        (SELECT date, (value * price_value) AS cost
-                        FROM t1
-                        Natural Join Properties
-                        Natural Join Price
-                    )
-                    SELECT date, SUM(cost) AS daily_energy_cost
-                    FROM t2
-                    Group by date;
-                    '''
-    elif time_granularity == 'monthly':
-        sql_query = f'''
-                    WITH t1(pID, date, value, weekend, am) AS
-                        (Select pID, Date(report_time) AS date, value, 
-                        CASE when DAYOFWEEK(report_time) in (2,3,4,5,6) THEN false
-                        ELSE true END as weekend, 
-                        CASE when DATE_FORMAT(report_time, '%%p') = 'AM' THEN true
-                        ELSE false END as am
-                        FROM Data
-                        NATURAL JOIN Devices
-                        NATURAL JOIN Property_Device
-                        NATURAL JOIN Customer_Property
-                        WHERE event_label = 'energy use'
-                        AND {addition_where}
-                    ),
-                    t2(month, cost) AS
-                        (SELECT concat(YEAR(date), '.', MONTH(date)) AS month, (value * price_value) AS cost
-                        FROM t1
-                        Natural Join Properties
-                        Natural Join Price
-                    )
-                    SELECT month, SUM(cost) AS daily_energy_cost
-                    FROM t2
-                    Group by month;
-                    '''
-    cursor.execute(sql_query, tuple(params))
-    results = cursor.fetchall()
-    chart_data = []
-    print(results)
-    if not results:
-        message = "No energy cost data found!"
-        return render_template('energy_cost_summary.html', chart_data=chart_data, selected_period=selected_period, available_periods=available_periods,  message=message)
-    else:
-        # Process the results and pass them to the template
-        results = sorted(results, key=lambda x: x[0])
-        labels = []
-        values = []
-
-        for row in results:
-            # Use numerical indices for tuple elements
-            label = str(row[0])
-            value = float(row[1])
-            labels.append(label)
-            values.append(value)
-
-        chart_data = {
-            'labels': labels,
-            'values': values,
-        }
-
-        cursor.close()
-        conn.close()
-        return render_template('energy_cost_summary.html', chart_data=chart_data, selected_period=selected_period, available_periods=available_periods,  message=message)
+                cursor.close()
+                conn.close()
+                return render_template('energy_cost_summary.html', form=form, chart_data=chart_data,
+                                       message=message)
+    return render_template('energy_cost_summary.html', form=form, chart_data=chart_data, message=message)
 
 
 
