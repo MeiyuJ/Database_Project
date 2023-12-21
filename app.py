@@ -119,8 +119,9 @@ def logout():
     return redirect(url_for("home"))
 
 @app.route("/dashboard")
+@login_required
 def dashboard():
-    return render_template("dashboard.html")
+    return render_template("dashboard.html", email=current_user.email)
 
 
 class NewServiceLocationForm(FlaskForm):
@@ -178,7 +179,7 @@ def locations():
                         INSERT INTO Customer_Property(cID, pID) 
                         VALUES(%s, %s)
                         '''
-            cursor.execute(sql_query, (current_user.id, results[0]))
+            cursor.execute(sql_query, (current_user.id, results['pID']))
             conn.commit()
 
     print(current_user.id)
@@ -233,11 +234,11 @@ def devices(pID):
             form.model.choices = [('macbook pro', 'macbook pro'), ('alienware x17', 'alienware x17')]
     if form.validate_on_submit():
         sql_query = 'INSERT INTO Devices(type, model) VALUES (%s, %s)'
-        cursor.execute(sql_query, (location_id, device_type, device_model))
+        cursor.execute(sql_query, (form.type.data, form.model.data))
         conn.commit()
 
         cursor.execute('SELECT LAST_INSERT_ID()') # Retrieve the last inserted deviceID
-        new_device_id = cur.fetchone()[0]
+        new_device_id = cursor.fetchone()['LAST_INSERT_ID()']
         sql_query = 'INSERT INTO Property_Device(pID, deviceID) VALUES(%s, %s);'
         cursor.execute(sql_query, (pID, new_device_id))
         conn.commit()
@@ -260,13 +261,13 @@ def devices(pID):
 
 @app.route('/location/<int:pID>/delete_device/<int:deviceID>', methods=['POST'])
 # @login_required
-def delete_device(location_id, device_id):
+def delete_device(pID, deviceID):
     conn = get_db_conn()
     cursor = conn.cursor()
 
-    cursor.execute('DELETE FROM Data WHERE deviceID = %s', (device_id,))
-    cursor.execute('DELETE FROM Property_Device WHERE deviceID = %s', (device_id,))
-    cursor.execute('DELETE FROM Devices WHERE deviceID = %s', (device_id,))
+    cursor.execute('DELETE FROM Data WHERE deviceID = %s', (deviceID,))
+    cursor.execute('DELETE FROM Property_Device WHERE deviceID = %s', (deviceID,))
+    cursor.execute('DELETE FROM Devices WHERE deviceID = %s', (deviceID,))
     conn.commit()
 
     cursor.close()
@@ -846,7 +847,137 @@ def energy_comparison():
                                        avg_chart_data=avg_chart_data, message=message)
     return render_template('energy_comparison.html', form=form, chart_data=chart_data, avg_chart_data=avg_chart_data, message=message)
 
+'''View 4: How to save energy and money'''
+class EnergySavingForm(FlaskForm):
+    type = SelectField('Device Type',
+                       choices=[('all', 'all'),
+                                ('refrigerator', 'refrigerator'),
+                                ('AC', 'AC'),
+                                ('laptop', 'laptop')],
+                       id='type')
+    submit = SubmitField('Submit')
 
+
+@app.route('/energy_saving', methods=['GET', 'POST'])
+@login_required
+def energy_saving():
+    form = EnergySavingForm()
+    message = None
+    if form.validate_on_submit():
+        type = form.type.data
+        if type == 'refrigerator':
+            message = refrige_saving(current_user.id)
+        elif type == 'AC':
+            message = ac_saving(current_user.id)
+        elif type == 'laptop':
+            message = peak_saving(current_user.id, type='laptop')
+        else:
+            message = peak_saving(current_user.id, type = 'all')
+
+    return render_template('energy_saving.html', form=form, message=message)
+
+def peak_saving(cID, type):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    condition = []
+    params = []
+    condition.append('cID = %s')
+    params.append(cID)
+    if type != 'all':
+        condition.append('type = %s')
+        params.append(type)
+
+    addition_where = ' AND '.join(condition)
+    sql_query = f'''
+                WITH t1(pID, date, value, weekend, am) AS
+                (Select pID, Date(report_time) AS date, value, 
+                CASE when DAYOFWEEK(report_time) in (2,3,4,5,6) THEN false
+                ELSE true END as weekend, 
+                CASE when DATE_FORMAT(report_time, '%%p') = 'AM' THEN true
+                ELSE false END as am
+                FROM Data
+                NATURAL JOIN Devices
+                NATURAL JOIN Property_Device
+                NATURAL JOIN Customer_Property
+                WHERE event_label = 'energy use'
+                AND {addition_where}
+                )
+                SELECT SUM(value), weekend, am
+                FROM t1
+                GROUP BY weekend, am
+                ORDER BY weekend, am
+                '''
+    cursor.execute(sql_query, tuple(params))
+    results = cursor.fetchall() # weekend, am顺序是00，01，10，11
+    if not results:
+        return "No energy consumption data found!"
+    peak_consumption = results[3][0]
+    off_peak_consumption = results[0][0]
+    total_consumtion = results[0][0] + results[1][0] + results[2][0] + results[3][0]
+    peak_percentage = round(peak_consumption/total_consumtion * 100, 2)
+    off_peak_percentage = round(off_peak_consumption / total_consumtion * 100, 2)
+    return f'''You consume {peak_percentage}% energy at peak time and {off_peak_percentage}% energy at off-peak time.\n
+    You can save money by using devices at off-peak time more!'''
+
+
+def refrige_saving(cID):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+
+    sql_query = f'''
+                Select COUNT(*)
+                From Data data_open
+                Natural Join Devices
+                Natural Join Property_Device
+                Natural Join Properties
+                NATURAL JOIN Customer_Property
+                Where type = 'refrigerator'
+                AND cID = {cID}
+                And data_open.event_label = 'door opened'
+                And not exists (
+                    Select 1
+                    From Data data_close
+                    Where data_close.deviceID = data_open.deviceID
+                    And data_close.event_label = 'door closed'
+                    And data_close.report_time > data_open.report_time
+                    And data_close.report_time <= DATE_ADD(data_open.report_time, INTERVAL 30 MINUTE)
+                );
+                '''
+    cursor.execute(sql_query)
+    results = cursor.fetchone()
+    if not results:
+        return "No refrigerator data found!"
+    forget_time = results[0]
+    if forget_time:
+        return peak_saving(cID, 'refrigerator') + f'''\n
+        You forgot to close fridge door for more than 30 minutes for {forget_time} times!\n
+        Pay attention next time!'''
+    return peak_saving(cID, 'refrigerator') + f'''\n
+    Thumbs up! You never forgets to close fridge door.'''
+
+def ac_saving(cID):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+
+    sql_query = f'''
+                Select AVG(value)
+                From Data
+                Natural Join Devices
+                Natural Join Property_Device
+                Natural Join Properties
+                NATURAL JOIN Customer_Property
+                Where type = 'AC'
+                AND cID = {cID}
+                And (event_label = 'temp higher' OR event_label = 'temp lowered')
+                '''
+    cursor.execute(sql_query)
+    results = cursor.fetchone()
+    if not results:
+        return "No AC temperature data found!"
+    avg_temp = results[0]
+    return peak_saving(cID, 'refrigerator') + f'''\n
+    The avg temperature setting of your AC is {avg_temp}!\n
+    Maybe you should set it lower.'''
 
 if __name__ == "__main__":
     app.run(debug=True)

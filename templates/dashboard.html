@@ -22,6 +22,17 @@
             color: #333;
             margin-bottom: 20px;
         }
+        .normal-btn {
+            width: 100%;
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
         .tab {
             overflow: hidden;
             border-radius: 8px;
@@ -86,25 +97,31 @@
 </head>
 <body>
     <div class="container">
-        <h1>Welcome to our CS6038 Final Project</h1>
-        <h2>Author: Lingfeng Fan, Miyu Zhang</h2>
+        <h1>Welcome!  {{ email }}</h1>
+        <h3>CS6083 Project: Lingfeng Fan, Miyu Zhang</h3>
         <div class="tab">
             <button class="tablinks" onclick="openTab(event, 'section1')">Analysis</button>
             <button class="tablinks" onclick="openTab(event, 'section2')">Services</button>
         </div>
 
         <div id="section1" class="tabcontent active">
-            <div class="content">
-                <h2>This is a test for Frank!</h2>
-                <h2>This is the "Analysis" tab</h2>
-                <p>Please add your analysis chart here.</p>
+            <div class="button-container">
+                <a href="{{ url_for('energy_consumption_summary') }}" class="normal-btn">Energy Consumption Analysis</a>
+            </div>
+            <div class="button-container">
+                <a href="{{ url_for('energy_cost_summary') }}" class="normal-btn">Energy Cost Analysis</a>
+            </div>
+            <div class="button-container">
+                <a href="{{ url_for('energy_comparison') }}" class="normal-btn">Energy Consumption Comparison</a>
+            </div>
+            <div class="button-container">
+                <a href="{{ url_for('energy_saving') }}" class="normal-btn">Energy Saving Tips</a>
             </div>
         </div>
 
         <div id="section2" class="tabcontent">
-            <div class="content">
-                <h2>This is the "Services" tab.</h2>
-                <p>Please add your service content here.</p>
+            <div class="button-container">
+                <a href="{{ url_for('locations') }}" class="normal-btn">My Locations</a>
             </div>
         </div>
 

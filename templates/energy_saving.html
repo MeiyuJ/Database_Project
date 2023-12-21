@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Energy Saving</title>
+    <style>
+        /* Styles (similar to the provided example) */
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f7f7f7;
+        }
+        .container {
+            width: 80%;
+            margin: 0 auto;
+            text-align: center;
+            padding-top: 20px;
+        }
+        h2, h3 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        form {
+            margin-top: 20px;
+        }
+        select, input[type="submit"] {
+            padding: 5px 10px;
+            margin-right: 10px;
+        }
+        .message {
+            margin-top: 20px;
+            color: #333;
+            font-weight: bold;
+        }
+        /* Add any additional styles as needed */
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h2>Energy Saving</h2>
+        <form method="post" action="{{ url_for('energy_saving') }}">
+            {{ form.hidden_tag() }}
+            <label for="type">Device Type:</label>
+            {{ form.type(id='type') }}
+            {{ form.submit }}
+        </form>
+        {% if message %}
+            <div class="alert alert-info" role="alert" style="white-space: pre-line">{{ message }}</div>
+        {% endif %}
+    </div>
+</body>
+</html>
