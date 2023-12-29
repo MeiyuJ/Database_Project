@@ -14,8 +14,8 @@ drop table if exists Customers;
 CREATE TABLE Customers (
 	cID INT(5) AUTO_INCREMENT PRIMARY KEY,
 	name VARCHAR(20) NOT NULL,
-    email VARCHAR(50) UNIQUE NOT NULL,
-    password VARCHAR(100) NOT NULL,
+	email VARCHAR(50) UNIQUE NOT NULL,
+	password VARCHAR(100) NOT NULL,
 	billing_address VARCHAR(50) NOT NULL
 );
 ALTER TABLE Customers AUTO_INCREMENT = 1;

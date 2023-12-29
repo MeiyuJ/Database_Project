@@ -11,21 +11,21 @@ app.config['SECRET_KEY'] = 'MeiyuJ'
 login_manager = LoginManager(app)
 
 #MySQL database initialization
-DB_CONFIG = {
-   "host": "localhost",
-    "user": "admin",
-    "password": "admin",
-    "database": "project2"
-}
+# DB_CONFIG = {
+#    "host": "localhost",
+#     "user": "admin",
+#     "password": "admin",
+#     "database": "project2"
+# }
 
-'''
+
 DB_CONFIG = {
     "host": "localhost",
     "user": "root",
     "password": "abc123",
     "database": "project2"
 }
-'''
+
 
 def get_db_conn():
     return pymysql.connect(**DB_CONFIG)
@@ -395,6 +395,8 @@ def get_available_periods(cID, pID, type, time_granularity):
     available_periods = sorted(cursor.fetchall())
     cursor.close()
     conn.close()
+    if not available_periods:
+        return [('...', '...')]
     return [(str(period[0]), str(period[0])) for period in available_periods]
 
 
@@ -982,4 +984,4 @@ def ac_saving(cID):
     Maybe you should set it lower.'''
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)
