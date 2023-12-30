@@ -59,6 +59,12 @@ def load_user(user_id):
     return None
 
 
+@app.errorhandler(401)
+def unauthorized(e):
+    # Redirect to the login page if the user is unauthorized
+    return redirect(url_for("login"))
+
+
 @app.route("/")
 def home():
     return render_template("home.html")
@@ -915,9 +921,14 @@ def peak_saving(cID, type):
     results = cursor.fetchall() # weekend, am顺序是00，01，10，11
     if not results:
         return "No energy consumption data found!"
-    peak_consumption = results[3][0]
-    off_peak_consumption = results[0][0]
-    total_consumtion = results[0][0] + results[1][0] + results[2][0] + results[3][0]
+
+    result_dict = {(0, 0): 0, (0, 1): 0, (1, 0): 0, (1, 1): 0}  #weekend, am
+    for row in results:
+        result_dict[row[1], row[2]] = row[0]
+
+    peak_consumption = result_dict[(1, 1)]
+    off_peak_consumption = result_dict[(0, 0)]
+    total_consumtion = sum(result_dict.values())
     peak_percentage = round(peak_consumption/total_consumtion * 100, 2)
     off_peak_percentage = round(off_peak_consumption / total_consumtion * 100, 2)
     return f'''You consume {peak_percentage}% energy at peak time and {off_peak_percentage}% energy at off-peak time.\n
@@ -979,7 +990,7 @@ def ac_saving(cID):
     if not results:
         return "No AC temperature data found!"
     avg_temp = results[0]
-    return peak_saving(cID, 'refrigerator') + f'''\n
+    return peak_saving(cID, 'AC') + f'''\n
     The avg temperature setting of your AC is {avg_temp}!\n
     Maybe you should set it lower.'''
 
